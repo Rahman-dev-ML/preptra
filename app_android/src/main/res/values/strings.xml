@@ -34,7 +34,7 @@
         \"relation\": [\"delegate_permission/common.handle_all_urls\"],
         \"target\": {
             \"namespace\": \"web\",
-            \"site\": \"https://preptra-q4agcxq7k-rahmanik1228-9558s-projects.vercel.app\"
+            \"site\": \"https://preptra-peach.vercel.app\"
         }
     }]
     

@@ -1,15 +1,11 @@
 import type { NextConfig } from "next";
-import withPWA from "next-pwa";
 
 const nextConfig: NextConfig = {
-  images: {
-    domains: ["localhost"],
+  experimental: {
+    // Keep the home screen in memory so Back does not download it again.
+    staleTimes: { dynamic: 60, static: 300 },
+    routerBFCache: true,
   },
 };
 
-export default withPWA({
-  dest: "public",
-  register: true,
-  skipWaiting: true,
-  disable: process.env.NODE_ENV === "development",
-})(nextConfig);
+export default nextConfig;

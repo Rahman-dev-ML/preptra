@@ -40,4 +40,7 @@ yarn-error.log*
 *.tsbuildinfo
 next-env.d.ts
 
+# past-paper PDFs cached on first view (rebuilt by the server)
+/data/paper-cache
+
 .vercel

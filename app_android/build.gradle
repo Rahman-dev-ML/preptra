@@ -22,17 +22,17 @@ plugins {
 
 def twaManifest = [
     applicationId: 'com.preptra.app',
-    hostName: 'preptra-q4agcxq7k-rahmanik1228-9558s-projects.vercel.app', // The domain being opened in the TWA.
+    hostName: 'preptra-peach.vercel.app', // The domain being opened in the TWA. Must match assetlinks.json.
     launchUrl: '/', // The start path for the TWA. Must be relative to the domain.
     name: 'PrepTra', // The application name.
     launcherName: 'PrepTra', // The name shown on the Android Launcher.
-    themeColor: '#1E40AF', // The color used for the status bar.
+    themeColor: '#0B1E5B', // The color used for the status bar.
     themeColorDark: '#000000', // The color used for the dark status bar.
     navigationColor: '#000000', // The color used for the navigation bar.
     navigationColorDark: '#000000', // The color used for the dark navbar.
     navigationDividerColor: '#000000', // The navbar divider color.
     navigationDividerColorDark: '#000000', // The dark navbar divider color.
-    backgroundColor: '#1E40AF', // The color used for the splash screen background.
+    backgroundColor: '#0B1E5B', // The color used for the splash screen background.
     enableNotifications: true, // Set to true to enable notification delegation.
     // Every shortcut must include the following fields:
     // - name: String that will show up in the shortcut.
@@ -76,12 +76,12 @@ android {
             // The URL the Web Manifest for the Progressive Web App that the TWA points to. This
             // is used by Chrome OS and Meta Quest to open the Web version of the PWA instead of
             // the TWA, as it will probably give a better user experience for non-mobile devices.
-            resValue "string", "webManifestUrl", 'https://api.jsonbin.io/v3/b/68e313af43b1c97be95bce2d'
+            resValue "string", "webManifestUrl", 'https://preptra-peach.vercel.app/manifest.json'
         
 
         
             // This is used by Meta Quest.
-            resValue "string", "fullScopeUrl", 'https://api.jsonbin.io/v3/b/'
+            resValue "string", "fullScopeUrl", 'https://preptra-peach.vercel.app/'
         
 
         

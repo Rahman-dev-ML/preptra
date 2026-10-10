@@ -149,11 +149,7 @@
                 <category android:name="android.intent.category.DEFAULT" />
                 <category android:name="android.intent.category.BROWSABLE"/>
                 <data android:scheme="https"
-                    android:host="@string/hostName"
-                
-                    android:pathPrefix="/v3/b/"
-                
-                />
+                    android:host="@string/hostName" />
             </intent-filter>
 
             
