@@ -2,10 +2,11 @@ import { createReadStream, statSync } from "fs";
 import { Readable } from "stream";
 import { NextResponse } from "next/server";
 import { getPastPaper } from "@/lib/content";
-import { PAPER_UA, paperSource, readyPaperPath } from "@/lib/paper-store";
+import { PAPER_UA, ensurePaper, paperSource, readyPaperPath } from "@/lib/paper-store";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
+export const maxDuration = 60;
 
 type Ctx = { params: Promise<{ slug: string; id: string }> };
 
@@ -14,28 +15,43 @@ export async function GET(request: Request, { params }: Ctx) {
   const paper = getPastPaper(slug, id);
   if (!paper) return new NextResponse("Paper not found", { status: 404 });
 
-  if (paper.pdf?.startsWith("/")) {
-    return NextResponse.redirect(new URL(paper.pdf, request.url));
-  }
-
   const download = new URL(request.url).searchParams.has("download");
   const fileName = `${paper.title.replace(/[^\w\- ]+/g, "")}.pdf`;
-  const local = readyPaperPath(slug, paper.id);
-  if (local) {
-    try {
-      return serveFile(local, request, fileName, download);
-    } catch (error) {
-      console.error("[paper] read", slug, id, error);
+
+  try {
+    // Years before ~2016 use CSS Point signed links. Pull the whole PDF once,
+    // verify it, cache it, then serve — streaming those hops was what failed for users.
+    if (paper.page && paper.file && !paper.pdf) {
+      const file = await ensurePaper(slug, paper);
+      if (!file) return new NextResponse("The paper could not be fetched right now.", { status: 502 });
+      return serveFile(file, request, fileName, download);
+    }
+
+    const local = readyPaperPath(slug, paper.id);
+    if (local) return serveFile(local, request, fileName, download);
+
+    if (paper.pdf?.startsWith("/")) {
       return new NextResponse("The paper could not be fetched right now.", { status: 502 });
     }
-  }
 
-  // Not on disk yet. Stream from the source. A dead source is a 502, not a server crash.
+    return await proxyDirect(paper, request, fileName, download);
+  } catch (error) {
+    console.error("[paper]", slug, id, error);
+    return new NextResponse("The paper could not be fetched right now.", { status: 502 });
+  }
+}
+
+async function proxyDirect(
+  paper: NonNullable<ReturnType<typeof getPastPaper>>,
+  request: Request,
+  fileName: string,
+  download: boolean,
+) {
   let source: { url: string; referer?: string } | null = null;
   try {
     source = await paperSource(paper);
   } catch (error) {
-    console.error("[paper] source", slug, id, error);
+    console.error("[paper] source", paper.id, error);
     return new NextResponse("The paper could not be fetched right now.", { status: 502 });
   }
   if (!source) return new NextResponse("The paper could not be fetched right now.", { status: 502 });
@@ -49,7 +65,7 @@ export async function GET(request: Request, { params }: Ctx) {
   if (range) headers.set("range", range);
 
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 20000);
+  const timer = setTimeout(() => ctrl.abort(), 45000);
   const onAbort = () => ctrl.abort();
   request.signal.addEventListener("abort", onAbort);
 
@@ -75,7 +91,8 @@ export async function GET(request: Request, { params }: Ctx) {
 
   const out = new Headers();
   out.set("content-type", "application/pdf");
-  out.set("accept-ranges", upstream.headers.get("accept-ranges") || "bytes");
+  const acceptRanges = upstream.headers.get("accept-ranges");
+  if (acceptRanges) out.set("accept-ranges", acceptRanges);
   out.set("cache-control", "public, max-age=86400");
   out.set("content-disposition", `${download ? "attachment" : "inline"}; filename="${fileName}"`);
   const length = upstream.headers.get("content-length");

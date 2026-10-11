@@ -338,18 +338,32 @@ function toPastPapers(slug: string): PastPaper[] {
   if (Array.isArray(entries)) {
     for (const entry of entries) {
       const year = Number(entry.year);
-      const hasSource = Boolean((entry.pdf || "").trim() || ((entry.page || "").trim() && (entry.file || "").trim()));
-      if (!year || !hasSource) continue;
+      if (!year) continue;
       const paper = entry.paper === "I" || entry.paper === "II" ? entry.paper : undefined;
       const id = (entry.id || `${year}${paper ? `-${paper.toLowerCase()}` : ""}`).trim();
       if (seen.has(id)) continue;
+      const listedPdf = (entry.pdf || "").trim();
+      const onDisk = (filePath: string) => {
+        try {
+          return fs.existsSync(filePath) && fs.statSync(filePath).size > 1000;
+        } catch {
+          return false;
+        }
+      };
+      const hasBundled = onDisk(path.join(ROOT, "public", "papers", slug, `${id}.pdf`));
+      const hasCached = onDisk(path.join(ROOT, "data", "paper-cache", slug, `${id}.pdf`));
+      const pdf = listedPdf || (hasBundled ? `/papers/${slug}/${id}.pdf` : "");
+      // Show a year only when we can deliver bytes: remote/static pdf, or a finished
+      // local file. Bare CSS Point page links without a file are hidden (they 502 on Vercel).
+      const hasSource = Boolean(pdf || hasBundled || hasCached);
+      if (!hasSource) continue;
       seen.add(id);
       papers.push({
         id,
         year,
         paper,
         title: (entry.title || `${year}${paper ? ` Paper-${paper}` : ""}`).trim(),
-        pdf: entry.pdf?.trim() || undefined,
+        pdf: pdf || undefined,
         page: entry.page?.trim() || undefined,
         file: entry.file?.trim() || undefined,
       });

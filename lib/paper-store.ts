@@ -3,11 +3,11 @@ import path from "path";
 import type { PastPaper } from "@/lib/content";
 
 const DIR = path.join(process.cwd(), "data", "paper-cache");
+const PUBLIC_PAPERS = path.join(process.cwd(), "public", "papers");
 export const PAPER_UA =
-  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36";
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36";
 
 const inflight = new Map<string, Promise<string | null>>();
-const sourceCache = new Map<string, { url: string; referer?: string; exp: number }>();
 
 export function cachedPaperPath(slug: string, id: string) {
   return path.join(DIR, slug, `${id}.pdf`);
@@ -15,36 +15,34 @@ export function cachedPaperPath(slug: string, id: string) {
 
 /** A finished PDF on disk. Missing or half-written files are ignored so a reader is never blocked on a download. */
 export function readyPaperPath(slug: string, id: string) {
-  const dest = cachedPaperPath(slug, id);
-  return isPdf(dest) ? dest : null;
+  const cached = cachedPaperPath(slug, id);
+  if (isPdf(cached)) return cached;
+  const published = path.join(PUBLIC_PAPERS, slug, `${id}.pdf`);
+  if (isPdf(published)) return published;
+  return null;
 }
 
 /**
- * The URL to stream right now. Direct PDFs return immediately.
- * CSS Point signed links are resolved once and reused for a few minutes.
+ * Direct PDFs return immediately. CSS Point papers get a fresh signed link every time —
+ * reusing an old signature is what produced "link expired" / empty opens for years before 2016.
  */
 export async function paperSource(paper: PastPaper): Promise<{ url: string; referer?: string } | null> {
   if (paper.pdf && !paper.pdf.startsWith("/")) return { url: paper.pdf };
   if (!paper.page || !paper.file) return null;
-
-  const key = `${paper.page}|${paper.file}`;
-  const hit = sourceCache.get(key);
-  if (hit && hit.exp > Date.now()) return { url: hit.url, referer: hit.referer };
-
   const url = await resolveCssPoint(paper.page, paper.file);
   if (!url) return null;
-  sourceCache.set(key, { url, referer: paper.page, exp: Date.now() + 8 * 60 * 1000 });
   return { url, referer: paper.page };
 }
 
 /** Returns a local PDF path, downloading and storing it the first time. Later requests never touch the source. */
 export function ensurePaper(slug: string, paper: PastPaper): Promise<string | null> {
-  const dest = cachedPaperPath(slug, paper.id);
-  if (isPdf(dest)) return Promise.resolve(dest);
+  const ready = readyPaperPath(slug, paper.id);
+  if (ready) return Promise.resolve(ready);
   const key = `${slug}/${paper.id}`;
   const pending = inflight.get(key);
   if (pending) return pending;
-  const job = download(paper, dest).finally(() => inflight.delete(key));
+  const dest = cachedPaperPath(slug, paper.id);
+  const job = downloadWithRetry(paper, dest).finally(() => inflight.delete(key));
   inflight.set(key, job);
   return job;
 }
@@ -63,27 +61,39 @@ function isPdf(file: string) {
   }
 }
 
-async function download(paper: PastPaper, dest: string): Promise<string | null> {
-  let url: string | null = null;
-  let referer: string | undefined;
-  if (paper.pdf && !paper.pdf.startsWith("/")) {
-    url = paper.pdf;
-  } else if (paper.page && paper.file) {
-    url = await resolveCssPoint(paper.page, paper.file);
-    referer = paper.page;
+async function downloadWithRetry(paper: PastPaper, dest: string): Promise<string | null> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const saved = await download(paper, dest);
+      if (saved) return saved;
+    } catch (error) {
+      console.error("[paper] download attempt", attempt + 1, paper.id, error);
+    }
+    await sleep(400 * (attempt + 1));
   }
-  if (!url) return null;
+  return null;
+}
 
-  const res = await fetch(url, {
-    headers: { "user-agent": PAPER_UA, ...(referer ? { referer } : {}) },
+async function download(paper: PastPaper, dest: string): Promise<string | null> {
+  const source = await paperSource(paper);
+  if (!source) return null;
+
+  const res = await fetch(source.url, {
+    headers: {
+      "user-agent": PAPER_UA,
+      accept: "application/pdf,*/*",
+      ...(source.referer ? { referer: source.referer } : {}),
+    },
+    redirect: "follow",
     cache: "no-store",
+    signal: AbortSignal.timeout(45000),
   });
   if (!res.ok) return null;
   const buf = Buffer.from(await res.arrayBuffer());
   if (buf.length < 1000 || buf.subarray(0, 4).toString() !== "%PDF") return null;
 
   fs.mkdirSync(path.dirname(dest), { recursive: true });
-  const tmp = `${dest}.${process.pid}.part`;
+  const tmp = `${dest}.${process.pid}.${Date.now()}.part`;
   fs.writeFileSync(tmp, buf);
   fs.renameSync(tmp, dest);
   return dest;
@@ -92,19 +102,31 @@ async function download(paper: PastPaper, dest: string): Promise<string | null> 
 async function resolveCssPoint(page: string, file: string) {
   const html = await (
     await fetch(`${page}${page.includes("?") ? "&" : "?"}v=${Date.now()}`, {
-      headers: { "user-agent": PAPER_UA, "cache-control": "no-cache", pragma: "no-cache" },
+      headers: {
+        "user-agent": PAPER_UA,
+        accept: "text/html,application/xhtml+xml",
+        "cache-control": "no-cache",
+        pragma: "no-cache",
+      },
       cache: "no-store",
+      signal: AbortSignal.timeout(25000),
     })
   ).text();
-  const wanted = file.toLowerCase();
+
+  const wanted = file.replace(/\+/g, " ").toLowerCase();
+  const wantedBase = path.posix.basename(wanted);
+  let fallback: string | null = null;
+
   for (const match of html.matchAll(/href="([^"]*tcp_secure_download[^"]*)"/g)) {
     const link = match[1].replace(/&#038;|&amp;/g, "&");
     const fileMatch = link.match(/[?&]file=([^&]+)/);
     if (!fileMatch) continue;
     const decoded = safeDecode(fileMatch[1]).replace(/\+/g, " ").toLowerCase();
-    if (decoded === wanted) return link;
+    const absolute = link.startsWith("http") ? link : new URL(link, page).href;
+    if (decoded === wanted) return absolute;
+    if (!fallback && path.posix.basename(decoded) === wantedBase) fallback = absolute;
   }
-  return null;
+  return fallback;
 }
 
 function safeDecode(value: string) {
@@ -113,4 +135,8 @@ function safeDecode(value: string) {
   } catch {
     return value;
   }
+}
+
+function sleep(ms: number) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

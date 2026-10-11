@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useEffect, useState } from "react";
 import { PaperScreen } from "@/components/paper-screen";
 import type { PaperYear, PastPaper, StudyNote } from "@/lib/content";
-import { getPaperUrl } from "@/lib/load-paper";
+import { getPaperDownloadUrl, getPaperUrl } from "@/lib/load-paper";
 
 const Quiz = dynamic(() => import("@/components/quiz").then((m) => m.Quiz), { loading: () => <PaneSkeleton /> });
 const AnalysisView = dynamic(() => import("@/components/analysis-view").then((m) => m.AnalysisView), {
@@ -181,7 +181,8 @@ function Papers({ slug, name, papers }: { slug: string; name: string; papers: Pa
       {open ? (
         <PaperScreen
           key={open.paper.id}
-          src={getPaperUrl(slug, open.paper.id)}
+          src={getPaperUrl(slug, open.paper.id, open.paper)}
+          downloadHref={getPaperDownloadUrl(slug, open.paper.id)}
           title={`${name} · ${open.paper.year}${open.paper.paper ? ` · Paper ${open.paper.paper}` : ""}`}
           openedAt={open.openedAt}
           onClose={() => setOpen(null)}

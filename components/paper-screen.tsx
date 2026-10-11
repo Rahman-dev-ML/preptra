@@ -10,11 +10,13 @@ const PdfDocument = dynamic(() => import("@/components/pdf-document").then((m) =
 
 export function PaperScreen({
   src,
+  downloadHref,
   title,
   openedAt,
   onClose,
 }: {
   src: string;
+  downloadHref?: string;
   title: string;
   openedAt: number;
   onClose: () => void;
@@ -44,7 +46,7 @@ export function PaperScreen({
           <p className="truncate text-[15px] font-bold">{title}</p>
         </div>
         <a
-          href={`${src}?download`}
+          href={downloadHref || `${src}${src.includes("?") ? "&" : "?"}download=1`}
           className="grid h-10 w-10 shrink-0 place-items-center rounded-full bg-white/10"
           aria-label="Download paper"
         >
