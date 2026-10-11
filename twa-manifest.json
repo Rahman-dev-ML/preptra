@@ -1,6 +1,6 @@
 {
   "packageId": "com.preptra.app",
-  "host": "preptra-peach.vercel.app",
+  "host": "preptra-app.vercel.app",
   "name": "PrepTra",
   "launcherName": "PrepTra",
   "display": "standalone",
@@ -23,7 +23,7 @@
   "appVersionCode": 4,
   "shortcuts": [],
   "generatorApp": "bubblewrap-cli",
-  "webManifestUrl": "https://preptra-peach.vercel.app/manifest.json",
+  "webManifestUrl": "https://preptra-app.vercel.app/manifest.json",
   "fallbackType": "customtabs",
   "features": {},
   "alphaDependencies": {
@@ -32,7 +32,7 @@
   "enableSiteSettingsShortcut": true,
   "isChromeOSOnly": false,
   "isMetaQuest": false,
-  "fullScopeUrl": "https://preptra-peach.vercel.app/",
+  "fullScopeUrl": "https://preptra-app.vercel.app/",
   "minSdkVersion": 21,
   "orientation": "default",
   "fingerprints": [],
