@@ -1,7 +1,7 @@
 {
   "headers": [
     {
-      "source": "/papers/(.*).pdf",
+      "source": "/papers/:path*",
       "headers": [
         {
           "key": "Cache-Control",
